@@ -60,7 +60,7 @@ def _get_weights(R, theta):
     return weights
 
 class EntroPort(object):
-    """ Portfolio allocation with relative entropy minimization
+    r""" Portfolio allocation with relative entropy minimization
 
     Estimates portfolio weights on a rolling out of sample basis by projecting
     past returns on an estimated stochastic discount factor. 
@@ -80,20 +80,48 @@ class EntroPort(object):
 
     Attributes
     ----------
-    theta_ : DataFrame
+    `theta_` : DataFrame
         Estimated thetas
     
-    weights_ : DataFrame
+    `weights_` : DataFrame
         Estimated weights
     
-    pfs_ : DataFrame
-        The time series of the estimated stochastic discount factor and
-        'information portfolio'
+    `pfs_` : DataFrame
+        The time series of the estimated stochastic discount factor (`sdf`) and
+        information portfolio (`ip`)
+
+    Notes
+    -----
+    In detail:
+    for each estimation window of size **T**, estimate
+
+    .. math::
+
+        \boldsymbol{\hat \theta} = \arg\min_{\boldsymbol{\theta}}
+         \sum_{t=1}^{T}\mathrm{kernel}(\boldsymbol{\theta}, \mathbf{R}_t)
+
+    where
+
+    .. math::
+
+        \mathrm{kernel}(\boldsymbol{\theta}, \mathbf{R}_t) =
+        e^{\boldsymbol{\theta'} \mathbf{R}_t}
+
+    The estimated portfolio weights are the coefficients (normalized) obtained
+    from regressing the returns in the estimation window on the **kernel**
+    evaluated at :math:`\boldsymbol{\hat \theta}`
+
+    The out of sample *information portfolio* is these weights multiplied by
+    the out of sample returns.
+
+    The out of sample *stochastic discount factor* is the estimated **kernel**
+    evaluated at the out of sample returns.
 
     References
     ----------
-    .. [1] A One Factor Benchmark Model for Asset Pricing' by
-    Ghosh, Julliard, and Taylor (2015 wp)
+    .. [1] Ghosh, Julliard, and Taylor A, "One Factor Benchmark Model
+        for Asset Pricing", (2015 wp)
+
     """
 
     def __init__(self, df, estlength, step=1):
@@ -130,6 +158,14 @@ class EntroPort(object):
         return np.tile(theta, (reps, 1)), np.tile(weights, (reps, 1))
 
     def fit(self):
+        """Fit this model.
+
+        Returns
+        -------
+        self : object
+            Returns the instance itself.
+        """
+
         theta, weights = arrmap(self._fit_one_period, range(len(self.estidx)))
         
         index = self.df.index[self.oosidx[0][0]:self.Nobs]
