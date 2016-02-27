@@ -14,4 +14,4 @@ The figure below shows the path of $1 (log scale) invested in a) the market b) a
 `pip install entroport`
 
 ## Examples
-See ['the docs'](http://pythonhosted.org/entroport/)
+See [the docs](http://pythonhosted.org/entroport/)
