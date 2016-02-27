@@ -9,9 +9,9 @@ The figure below shows the path of $1 (log scale) invested in a) the market b) a
 ![alt tag](plot1.png)
 
 ## Installation
-(Requires Scipy / Numpy / Pandas, tested on OSX with Python 2.7)
+(Requires `Scipy` / `Numpy` / `Pandas`, tested on OSX with Python 2.7)
 
 `pip install entroport`
 
 ## Examples
-See `examples.ipynb` in `/docs`
+See ['the docs'](http://pythonhosted.org/entroport/)
