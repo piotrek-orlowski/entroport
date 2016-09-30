@@ -3,9 +3,10 @@ from scipy.optimize import minimize
 import pandas as pd
 import numpy as np
 import statsmodels.api as sm
+from sklearn.linear_model import RidgeCV
 
 from entroport.utils import window
-from entroport.utils import arrmap 
+from entroport.utils import arrmap
 
 MAX_OPT_ATTEMPTS = 10
 
@@ -22,14 +23,17 @@ def _goalfun(theta, *args):
 
     return fun, grad
 
+    # fun = np.sum(comm) + .0038 * np.abs(theta).sum()
+    # return fun
+
 def _get_thetas(R, pcached_startval):
     Nassets = R.shape[1]
     success = False
     i = 0
-    # Quirky but works, if the solver failed, some numerical 
-    # imprecision caused some tolerance level not to be met, increasing 
+    # Quirky but works, if the solver failed, some numerical
+    # imprecision caused some tolerance level not to be met, increasing
     # iterations, etc. won't remedy this. Restart and try again.
-    # The alernative would be a convex solver that is "guaranteed" to hit 
+    # The alernative would be a convex solver that is "guaranteed" to hit
     # the global minimim, but this is much slower (tried with `cvxpy`).
     # With this setup 'BFGS' is fast and performs well
     while not success and i < MAX_OPT_ATTEMPTS:
@@ -51,11 +55,25 @@ def _get_thetas(R, pcached_startval):
 
     return theta
 
-def _get_weights(R, theta):
+# def scorer(estimator, X, y):
+#     coef = estimator.coef_
+#     coefsum = np.abs(np.sum(estimator.coef_))
+#     if np.isclose(coefsum, 0.0):
+#         return -np.inf
+#     intercept = estimator.intercept_
+#     return -np.average( ((X * coef).sum(axis=1) + intercept - y)**2 )
+
+def _get_weights(R, theta, regularization=False):
     sdf_is = _kernel(theta, R)
-    reg = sm.OLS(sdf_is, sm.add_constant(R)).fit()
-    weights = reg.params[1:]
-    weights /= np.sum(weights)
+    if not regularization:
+        reg = sm.OLS(sdf_is, sm.add_constant(R)).fit()
+        weights = reg.params[1:]
+    else:
+        weights = RidgeCV(fit_intercept=True,
+                          normalize=False,
+                          cv=10).fit(R, sdf_is).coef_
+
+    weights /= -np.abs(np.sum(weights))
 
     return weights
 
@@ -63,7 +81,7 @@ class EntroPort(object):
     r""" Portfolio allocation with relative entropy minimization
 
     Estimates portfolio weights on a rolling out of sample basis by projecting
-    past returns on an estimated stochastic discount factor. 
+    past returns on an estimated stochastic discount factor.
 
     Parameters
     ----------
@@ -73,19 +91,19 @@ class EntroPort(object):
     estlength : int
         Length of the moving estimation window
 
-    step : int 
+    step : int
         The number of observations in the out of sample
-        estimation window (default is 1) - a step size of for ex. 10 would 
+        estimation window (default is 1) - a step size of for ex. 10 would
         be the same as a 10 period rebalancing.
 
     Attributes
     ----------
     `theta_` : DataFrame
         Estimated thetas
-    
+
     `weights_` : DataFrame
         Estimated weights
-    
+
     `pfs_` : DataFrame
         The time series of the estimated stochastic discount factor (`sdf`) and
         information portfolio (`ip`)
@@ -124,10 +142,11 @@ class EntroPort(object):
 
     """
 
-    def __init__(self, df, estlength, step=1):
+    def __init__(self, df, estlength, step=1, regularization=False):
         self.df = df
         self.estlength = estlength
         self.step = step
+        self.regularization = regularization
 
         self.Nobs = df.shape[0]
         assert step < estlength < self.Nobs
@@ -140,7 +159,7 @@ class EntroPort(object):
         if not self.oosidx[-1]:
             self.oosidx.pop()
             self.estidx.pop()
-        
+
         self._pcached_startval = np.random.rand(df.shape[1])
 
     def _fit_one_period(self, idx):
@@ -150,10 +169,10 @@ class EntroPort(object):
         R = self.df.iloc[estwindow].values
 
         theta = _get_thetas(R, self._pcached_startval)
-        weights = _get_weights(R, theta)
+        weights = _get_weights(R, theta, self.regularization)
 
         # b/c not necessarily equal to `self.step` in the last period
-        reps = len(ooswindow) 
+        reps = len(ooswindow)
 
         return np.tile(theta, (reps, 1)), np.tile(weights, (reps, 1))
 
@@ -167,7 +186,7 @@ class EntroPort(object):
         """
 
         theta, weights = arrmap(self._fit_one_period, range(len(self.estidx)))
-        
+
         index = self.df.index[self.oosidx[0][0]:self.Nobs]
         colnames = self.df.columns.tolist()
 
@@ -181,4 +200,3 @@ class EntroPort(object):
         self.pfs_ = pd.DataFrame({'sdf': sdf, 'ip': ip})
 
         return self
-
