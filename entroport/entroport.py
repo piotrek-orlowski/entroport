@@ -10,6 +10,13 @@ from entroport.utils import arrmap
 
 MAX_OPT_ATTEMPTS = 10
 
+class _Debug():
+    def __init__(self):
+        self.x = []
+        self.y = []
+
+_debug = _Debug()
+
 def _kernel(theta, R):
     """ theta : [N,] ndarray, R : [T, N] ndarray
     """
@@ -23,19 +30,11 @@ def _goalfun(theta, *args):
 
     return fun, grad
 
-    # fun = np.sum(comm) + .0038 * np.abs(theta).sum()
-    # return fun
-
 def _get_thetas(R, pcached_startval):
     Nassets = R.shape[1]
     success = False
     i = 0
-    # Quirky but works, if the solver failed, some numerical
-    # imprecision caused some tolerance level not to be met, increasing
-    # iterations, etc. won't remedy this. Restart and try again.
-    # The alernative would be a convex solver that is "guaranteed" to hit
-    # the global minimim, but this is much slower (tried with `cvxpy`).
-    # With this setup 'BFGS' is fast and performs well
+    # Quirky but works. Look at Convex.jl. cvxopt too slow.
     while not success and i < MAX_OPT_ATTEMPTS:
         optres = minimize(fun=_goalfun,
                           x0=pcached_startval,
@@ -48,7 +47,7 @@ def _get_thetas(R, pcached_startval):
         i += 1
 
     if not success:
-        raise RuntimeError("fmin failed", optres.message)
+        raise RuntimeError("fmin failed (SDF ML)", optres.message)
 
     theta = optres.x
     pcached_startval[:] = theta # Cleaner way to do this?
@@ -57,21 +56,26 @@ def _get_thetas(R, pcached_startval):
 
 # def scorer(estimator, X, y):
 #     coef = estimator.coef_
-#     coefsum = np.abs(np.sum(estimator.coef_))
+#     coefsum = -np.abs(np.sum(coef))
 #     if np.isclose(coefsum, 0.0):
-#         return -np.inf
+#         return np.inf
+#     coef /= coefsum
 #     intercept = estimator.intercept_
-#     return -np.average( ((X * coef).sum(axis=1) + intercept - y)**2 )
+#     return np.average( ((X * coef).sum(axis=1) + intercept - y)**2 )
 
-def _get_weights(R, theta, regularization=False):
+def _get_weights(R, theta, regularization, lmin, lmax, lnum, nfolds):
     sdf_is = _kernel(theta, R)
     if not regularization:
         reg = sm.OLS(sdf_is, sm.add_constant(R)).fit()
         weights = reg.params[1:]
     else:
-        weights = RidgeCV(fit_intercept=True,
-                          normalize=False,
-                          cv=10).fit(R, sdf_is).coef_
+        est = RidgeCV(alphas=np.linspace(lmin, lmax, num=lnum),
+        fit_intercept=True,
+        normalize=False,
+        cv=nfolds, scoring=None).fit(R, sdf_is)
+
+        weights = est.coef_
+        _debug.x.append(est.alpha_)
 
     weights /= -np.abs(np.sum(weights))
 
@@ -142,11 +146,16 @@ class EntroPort(object):
 
     """
 
-    def __init__(self, df, estlength, step=1, regularization=False):
+    def __init__(self, df, estlength, step=1, regularization=False,
+                    lmin=0.1, lmax = 5, lnum=10, nfolds=5):
         self.df = df
         self.estlength = estlength
         self.step = step
         self.regularization = regularization
+        self.lmin = lmin
+        self.lmax = lmax
+        self.lnum = lnum
+        self.nfolds = nfolds
 
         self.Nobs = df.shape[0]
         assert step < estlength < self.Nobs
@@ -169,7 +178,8 @@ class EntroPort(object):
         R = self.df.iloc[estwindow].values
 
         theta = _get_thetas(R, self._pcached_startval)
-        weights = _get_weights(R, theta, self.regularization)
+        weights = _get_weights(R, theta, self.regularization,
+                                self.lmin, self.lmax, self.lnum, self.nfolds)
 
         # b/c not necessarily equal to `self.step` in the last period
         reps = len(ooswindow)

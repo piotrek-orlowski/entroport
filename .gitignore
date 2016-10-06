@@ -1,4 +1,7 @@
 sandbox.ipynb
+YAK.txt
+forexsummary.ipynb
+sandbox2.ipynb
 .DS_Store
 
 # Byte-compiled / optimized / DLL files
@@ -70,4 +73,3 @@ target/
 
 # pyenv
 .python-version
-
