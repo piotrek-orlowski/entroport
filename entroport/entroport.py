@@ -34,7 +34,8 @@ def _get_thetas(R, pcached_startval):
     Nassets = R.shape[1]
     success = False
     i = 0
-    # Quirky but works. Look at Convex.jl. cvxopt too slow.
+    # Quirky but works. Look at Convex.jl. cvxopt too slow. Why:
+    # unfortunate weights can cause numerical overflow, just start over
     while not success and i < MAX_OPT_ATTEMPTS:
         optres = minimize(fun=_goalfun,
                           x0=pcached_startval,
@@ -47,7 +48,9 @@ def _get_thetas(R, pcached_startval):
         i += 1
 
     if not success:
-        raise RuntimeError("fmin failed (SDF ML)", optres.message)
+        raise RuntimeError("fmin failed (SDF ML). To avoid numerical overlow, "
+                            "make sure returns are not in per cent",
+                             optres.message)
 
     theta = optres.x
     pcached_startval[:] = theta # Cleaner way to do this?
