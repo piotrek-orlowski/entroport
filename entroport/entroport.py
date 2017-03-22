@@ -17,27 +17,27 @@ class _Debug():
 
 _debug = _Debug()
 
-def _kernel(theta, R):
+def _kernel1(theta, R):
     """ theta : [N,] ndarray, R : [T, N] ndarray
     """
     return np.exp(np.sum(theta * R, axis=1))
 
-def _goalfun(theta, *args):
+def _goalfun1(theta, *args):
     R = args[0]
-    comm = _kernel(theta, R)
+    comm = _kernel1(theta, R)
     fun = np.sum(comm)
     grad = np.sum(comm * R.T, axis=1)
 
     return fun, grad
 
-def _get_thetas(R, pcached_startval):
+def _get_thetas(R, goalfun, pcached_startval):
     Nassets = R.shape[1]
     success = False
     i = 0
     # Quirky but works. Look at Convex.jl. cvxopt too slow. Why:
     # unfortunate weights can cause numerical overflow, just start over
     while not success and i < MAX_OPT_ATTEMPTS:
-        optres = minimize(fun=_goalfun,
+        optres = minimize(fun=goalfun,
                           x0=pcached_startval,
                           args=R,
                           jac=True,
@@ -66,8 +66,8 @@ def _get_thetas(R, pcached_startval):
 #     intercept = estimator.intercept_
 #     return np.average( ((X * coef).sum(axis=1) + intercept - y)**2 )
 
-def _get_weights(R, theta, regularization, lmin, lmax, lnum, nfolds):
-    sdf_is = _kernel(theta, R)
+def _get_weights(R, theta, kernel, regularization, lmin, lmax, lnum, nfolds):
+    sdf_is = kernel(theta, R)
     if not regularization:
         reg = sm.OLS(sdf_is, sm.add_constant(R)).fit()
         weights = reg.params[1:]
@@ -150,7 +150,8 @@ class EntroPort(object):
     """
 
     def __init__(self, df, estlength, step=1, regularization=False,
-                    lmin=0.1, lmax = 5, lnum=10, nfolds=5):
+                    lmin=0.1, lmax = 5, lnum=10, nfolds=5,
+                    klicmetric=1):
         self.df = df
         self.estlength = estlength
         self.step = step
@@ -159,6 +160,13 @@ class EntroPort(object):
         self.lmax = lmax
         self.lnum = lnum
         self.nfolds = nfolds
+
+        if klicmetric == 1:
+            self.kernel = _kernel1
+            self.goalfun = _goalfun1
+        else:
+            self.kernel = _kernel2
+            self.goalfun = _goalfun2
 
         self.Nobs = df.shape[0]
         assert step < estlength < self.Nobs
@@ -180,8 +188,8 @@ class EntroPort(object):
 
         R = self.df.iloc[estwindow].values
 
-        theta = _get_thetas(R, self._pcached_startval)
-        weights = _get_weights(R, theta, self.regularization,
+        theta = _get_thetas(R, self.goalfun, self._pcached_startval)
+        weights = _get_weights(R, theta, self.kernel, self.regularization,
                                 self.lmin, self.lmax, self.lnum, self.nfolds)
 
         # b/c not necessarily equal to `self.step` in the last period
@@ -206,7 +214,7 @@ class EntroPort(object):
         self.thetas_ = pd.DataFrame(theta, index=index, columns=colnames)
         self.weights_ = pd.DataFrame(weights, index=index, columns=colnames)
 
-        sdf = map(lambda theta, R: _kernel(theta, R[None, :])[0],
+        sdf = map(lambda theta, R: self.kernel(theta, R[None, :])[0],
                   theta, self.df.loc[index].values)
         ip = (weights * self.df.loc[index]).sum(axis=1)
 
