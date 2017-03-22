@@ -151,7 +151,7 @@ class EntroPort(object):
 
     def __init__(self, df, estlength, step=1, regularization=False,
                     lmin=0.1, lmax = 5, lnum=10, nfolds=5,
-                    klicmetric=1):
+                    klicmetric=1, windowtype='moving'):
         self.df = df
         self.estlength = estlength
         self.step = step
@@ -170,7 +170,7 @@ class EntroPort(object):
 
         self.Nobs = df.shape[0]
         assert step < estlength < self.Nobs
-        self.estidx = list(window(range(self.Nobs), estlength, step))
+        self.estidx = list(window(range(self.Nobs), estlength, step, windowtype))
         self.oosidx = map(lambda x: range(x[-1] + 1, x[-1] + 1 + step),
                           self.estidx)
 

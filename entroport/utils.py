@@ -5,7 +5,7 @@ from itertools import chain
 
 def arrmap(f, seq):
     """Applies a function returning a n-tuple of arrays to seq and collapses the
-    resulting list of tuples of tuples of arrays to a list of n arrays 
+    resulting list of tuples of tuples of arrays to a list of n arrays
 
     >>> import numpy as np
     >>> np.random.seed(123)
@@ -26,7 +26,7 @@ def arrmap(f, seq):
                np.array(list(chain(*nestedlist[x]))),
                range(len(nestedlist)))
 
-def window(seq, size, step=1):
+def window(seq, size, step=1, type='moving'):
     """Yields the moving window of size `size` with step size `step`
     over the sequence `seq`
 
@@ -36,6 +36,9 @@ def window(seq, size, step=1):
     """
 
     nchuncks = (len(seq) - size) // step + 1
-    for i in range(0, nchuncks * step, step):
-        yield seq[i:i+size]
-
+    if type == 'moving':
+        for i in range(0, nchuncks * step, step):
+            yield seq[i:i+size]
+    else:
+        for i in range(0, nchuncks * step, step):
+            yield seq[0:i+size]
