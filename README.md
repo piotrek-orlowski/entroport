@@ -7,7 +7,7 @@ portfolio allocation with relative entropy minimization
 (Requires `Scipy` / `Numpy` / `Pandas`, tested on OSX with Python 2.7)
 
 ```
-$ pip install git+https://github.com/nuffe/entroport.git
+$ pip install git+https://github.com/erikcs/entroport.git
 # or
 $ pip install entroport
 ```
